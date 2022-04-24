@@ -25,9 +25,9 @@ namespace FusedVR.Web3 {
 
         public class Response<T> { public T response; } //generic response
 
-        private readonly static string host = "https://crypto.fusedvr.com/api"; //host for apis
+        public readonly static string host = "https://crypto.fusedvr.com/api"; //host for apis
 
-        private static string BEARER_TOKEN_KEY = "crypto.fusedvr.bearer.token";
+        public readonly static string BEARER_TOKEN_KEY = "crypto.fusedvr.bearer.token";
 
         /// <summary>
         /// Calls the /fused/login with an appId and email address

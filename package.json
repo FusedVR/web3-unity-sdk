@@ -1,6 +1,6 @@
 {
   "name": "com.fusedvr.web3",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "FusedVR Web3",
   "description": "This Web3 Package connects to the FusedVR APIs to help you authenticate and communicate with the Blockchain from Unity",
   "dependencies": {
