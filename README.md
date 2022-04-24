@@ -11,7 +11,8 @@ The goal of this service is enable game developers interested in building play 2
 Simply import this Github Repo as a Unity Package via the Unity Package Manager **Add from Git URL** : https://github.com/FusedVR/web3-unity-sdk.git
 
 Once imported, you should be able to make async calls against the Web3Manager static class for 
-- Login(appId, email)
+- Login(email, appId)
+- GetMagicLink(email, appId)
 - GetAddress()
 - GetNativeBalance(chain)
 - GetERC20Tokens(chain)

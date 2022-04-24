@@ -25,19 +25,19 @@ namespace FusedVR.Web3 {
 
         public class Response<T> { public T response; } //generic response
 
-        private readonly static string host = "https://crypto.fusedvr.com/api"; //host for apis
+        public readonly static string host = "https://crypto.fusedvr.com/api"; //host for apis
 
-        private static string bearerToken = null; //authentication token for the user's session
+        public readonly static string BEARER_TOKEN_KEY = "crypto.fusedvr.bearer.token";
 
         /// <summary>
         /// Calls the /fused/login with an appId and email address
         /// Requires a long polling against the API to ensure the user has time to authenticate
         /// Timeout is approximately 6 minutes
         /// </summary>
-        public static async Task<bool> Login(string appId, string email) {
+        public static async Task<bool> Login(string email, string appId) {
             WWWForm form = new WWWForm();
-            form.AddField("appId", appId);
             form.AddField("email", email);
+            form.AddField("appId", appId);
             string url = host + "/fused/login";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
             await webRequest.SendWebRequest();
@@ -45,10 +45,36 @@ namespace FusedVR.Web3 {
             Dictionary<string, string> jsonMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(
                 System.Text.Encoding.UTF8.GetString(webRequest.downloadHandler.data));
             if (jsonMap != null) {
+                string bearerToken = "";
                 jsonMap.TryGetValue("token", out bearerToken);
+                PlayerPrefs.SetString(BEARER_TOKEN_KEY, bearerToken);
                 return true;
             } else {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Requires that the Login Function has been called for the user and app
+        /// Calls the /fused/getMagicLink endpoint to get the link that authenticates the user 
+        /// This link should be displayed to the user in the application to enable them to authenticate the service
+        /// </summary>
+        public static async Task<string> GetMagicLink(string email, string appId) {
+            WWWForm form = new WWWForm();
+            form.AddField("email", email);
+            form.AddField("appId", appId);
+            string url = host + "/fused/getMagicLink";
+            UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
+            await webRequest.SendWebRequest();
+
+            Dictionary<string, string> jsonMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(
+                System.Text.Encoding.UTF8.GetString(webRequest.downloadHandler.data));
+            if (jsonMap != null) {
+                string value = ""; //get dictionary value
+                jsonMap.TryGetValue("magicLink", out value);
+                return value;
+            } else {
+                return "Login Function has NOT been called";
             }
         }
 
@@ -62,7 +88,7 @@ namespace FusedVR.Web3 {
             WWWForm form = new WWWForm();
             string url = host + "/account";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
-            webRequest.SetRequestHeader("Authorization", "Bearer " + bearerToken);
+            webRequest.SetRequestHeader("Authorization", "Bearer " + PlayerPrefs.GetString(BEARER_TOKEN_KEY) );
             await webRequest.SendWebRequest();
 
             Dictionary<string, string> jsonMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(
@@ -86,7 +112,7 @@ namespace FusedVR.Web3 {
             form.AddField("chain", chain);
             string url = host + "/account/balance";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
-            webRequest.SetRequestHeader("Authorization", "Bearer " + bearerToken);
+            webRequest.SetRequestHeader("Authorization", "Bearer " + PlayerPrefs.GetString(BEARER_TOKEN_KEY) );
             await webRequest.SendWebRequest();
 
             Dictionary<string, string> jsonMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(
@@ -110,7 +136,7 @@ namespace FusedVR.Web3 {
             form.AddField("chain", chain);
             string url = host + "/account/erc20";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
-            webRequest.SetRequestHeader("Authorization", "Bearer " + bearerToken);
+            webRequest.SetRequestHeader("Authorization", "Bearer " + PlayerPrefs.GetString(BEARER_TOKEN_KEY) );
             await webRequest.SendWebRequest();
 
             List< Dictionary<string, string> > jsonMap = JsonConvert.DeserializeObject<
@@ -129,7 +155,7 @@ namespace FusedVR.Web3 {
             form.AddField("chain", chain);
             string url = host + "/account/nfts";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
-            webRequest.SetRequestHeader("Authorization", "Bearer " + bearerToken);
+            webRequest.SetRequestHeader("Authorization", "Bearer " + PlayerPrefs.GetString(BEARER_TOKEN_KEY) );
             await webRequest.SendWebRequest();
 
             List<Dictionary<string, string>> jsonMap = JsonConvert.DeserializeObject<
