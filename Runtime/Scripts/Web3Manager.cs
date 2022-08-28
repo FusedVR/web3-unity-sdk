@@ -28,7 +28,7 @@ namespace FusedVR.Web3 {
         public class Response<T> { public T response; } 
 
         //public url host for api endpoints
-        public readonly static string host = "https://crypto.fusedvr.com/api"; 
+        public readonly static string host = "https://crypto-stage.fusedvr.com/api"; 
 
         //string enum class for chain ids to the api
         public class CHAIN {
@@ -51,26 +51,29 @@ namespace FusedVR.Web3 {
         #endregion
 
         #region Class Variables
-        private string uuid; //unique id for the user the web3manager is responsible for
-        private string appId; //app id for the user stored from login
+        public string UUID { get; } //unique id for the user the web3manager is responsible for
+        public string AppID { get; } //app id for the user stored from login
+
+        private string registerCode; //private instance of code
+        public string RegisterCode { get { return registerCode; } } //registration code used during authentication
         #endregion
 
         /// <summary>
         /// Constructor for the Web3 Manager
         /// </summary>
         private Web3Manager(string uuid, string appId) {
-            this.uuid = uuid;
-            this.appId = appId;
+            UUID = uuid;
+            AppID = appId;
         }
 
         #region Authentication
         /// <summary>
-        /// Calls the /fused/login with an appId and email address
-        /// Requires a long polling against the API to ensure the user has time to authenticate
-        /// Timeout is approximately 6 minutes
+        /// Static call to the /fused/register with an appId and a unique id for the client and creates Web3Manager
+        /// This unique id will be used to reference the player across sessions if the bearer token is still active
+        /// If the unique id is an email, then an email be sent to the player to allow them to authenticate
         /// </summary>
-        public static async Task<Web3Manager> Login(string email, string appId) {
-            Web3Manager mngr = new Web3Manager(email, appId);
+        public static async Task<Web3Manager> Register(string appId, string uuid) {
+            Web3Manager mngr = new Web3Manager(uuid, appId);
             try {
                 string token = mngr.GetBearerToken();
                 return mngr;
@@ -78,9 +81,55 @@ namespace FusedVR.Web3 {
                 Debug.Log(e.Message);
             }
 
+            string code = await mngr.Register(); //TODO change to try catch
+            if (code != null) {
+                return mngr;
+            } else {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Calls the /fused/register with an appId and a unique id for given Web3Manager object
+        /// This unique id will be used to reference the player across sessions if the bearer token is still active
+        /// If the unique id is an email, then an email be sent to the player to allow them to authenticate
+        /// </summary>
+        public async Task<string> Register() {
             WWWForm form = new WWWForm();
-            form.AddField("email", email);
-            form.AddField("appId", appId);
+            form.AddField("email", UUID);
+            form.AddField("appId", AppID);
+            string url = host + "/fused/register";
+            UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
+            await webRequest.SendWebRequest();
+
+            Dictionary<string, string> jsonMap = JsonConvert.DeserializeObject<Dictionary<string, string>>(
+                System.Text.Encoding.UTF8.GetString(webRequest.downloadHandler.data));
+            webRequest.Dispose();
+            if (jsonMap != null) {
+                string code = "";
+                jsonMap.TryGetValue("code", out code);
+
+                registerCode = code;
+                return RegisterCode;
+            } else {
+                //TODO: throw error???
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Called after Calls the /fused/login with an appId and email address
+        /// Requires a long polling against the API to ensure the user has time to authenticate
+        /// Timeout is approximately 6 minutes
+        /// </summary>
+        public async Task<bool> AwaitLogin() {
+            if (RegisterCode == null) {
+                return false; //TODO throw error that register has not been called
+            }
+
+            WWWForm form = new WWWForm();
+            form.AddField("code", RegisterCode);
+            form.AddField("appId", AppID);
             string url = host + "/fused/login";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
             await webRequest.SendWebRequest();
@@ -92,10 +141,10 @@ namespace FusedVR.Web3 {
                 string bearerToken = "";
                 jsonMap.TryGetValue("token", out bearerToken);
 
-                PlayerPrefs.SetString(mngr.GetBearerKey(), bearerToken);
-                return mngr;
+                PlayerPrefs.SetString(GetBearerKey(), bearerToken);
+                return true;
             } else {
-                return null;
+                return false; //TODO throw error that login failed
             }
         }
 
@@ -212,7 +261,7 @@ namespace FusedVR.Web3 {
         /// Get the Player Prefs Key to lookup the Bearer Token for FusedVR Chain Auth API Requests
         /// </summary>
         public string GetBearerKey() {
-            return BEARER_PREFIX_KEY + "." + uuid + "." + appId;
+            return BEARER_PREFIX_KEY + "." + UUID + "." + AppID;
         }
 
         /// <summary>
@@ -238,7 +287,7 @@ namespace FusedVR.Web3 {
             Dictionary<string, string> data = DecodeJWT(token);
             if (data != null) {
                 DateTime iat = new DateTime(long.Parse(data["iat"]));
-                if (data["appId"] == appId && iat < DateTime.Now) {
+                if (data["appId"] == AppID && iat < DateTime.Now) {
                     return true;
                 }
             }
