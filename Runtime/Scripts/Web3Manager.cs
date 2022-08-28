@@ -16,6 +16,7 @@ using UnityEngine.Networking;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 
+//TODO Add Test and Throw Errors
 namespace FusedVR.Web3 {
     /// <summary>
     /// A wrapper class around https://crypto.fusedvr.com APIs for authenticating against the blockchain
@@ -72,7 +73,7 @@ namespace FusedVR.Web3 {
         /// This unique id will be used to reference the player across sessions if the bearer token is still active
         /// If the unique id is an email, then an email be sent to the player to allow them to authenticate
         /// </summary>
-        public static async Task<Web3Manager> Register(string appId, string uuid) {
+        public static async Task<Web3Manager> Register(string uuid, string appId) {
             Web3Manager mngr = new Web3Manager(uuid, appId);
             try {
                 string token = mngr.GetBearerToken();
@@ -157,10 +158,10 @@ namespace FusedVR.Web3 {
         /// Calls the /fused/getMagicLink endpoint to get the link that authenticates the user 
         /// This link should be displayed to the user in the application to enable them to authenticate the service
         /// </summary>
-        public static async Task<string> GetMagicLink(string email, string appId) {
+        public async Task<string> GetMagicLink() {
             WWWForm form = new WWWForm();
-            form.AddField("email", email);
-            form.AddField("appId", appId);
+            form.AddField("code", RegisterCode);
+            form.AddField("appId", AppID);
             string url = host + "/fused/getMagicLink";
             UnityWebRequest webRequest = UnityWebRequest.Post(url, form);
             await webRequest.SendWebRequest();
