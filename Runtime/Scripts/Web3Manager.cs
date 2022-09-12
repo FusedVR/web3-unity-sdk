@@ -72,22 +72,19 @@ namespace FusedVR.Web3 {
         /// Static call to the /fused/register with an appId and a unique id for the client and creates Web3Manager
         /// This unique id will be used to reference the player across sessions if the bearer token is still active
         /// If the unique id is an email, then an email be sent to the player to allow them to authenticate
+        /// Tokens are saved between requests. If you would like to ignore this, please set ignoreCache = true
         /// </summary>
-        public static async Task<Web3Manager> Register(string uuid, string appId) {
+        public static async Task<Web3Manager> Register(string uuid, string appId, bool ignoreCache = false) {
             Web3Manager mngr = new Web3Manager(uuid, appId);
-            try {
+            if (!ignoreCache) {
                 string token = mngr.GetBearerToken();
-                return mngr;
-            } catch (Exception e) {
-                Debug.Log(e.Message);
+                if (token != null) {
+                    return mngr;
+                }
             }
 
-            string code = await mngr.Register(); //TODO change to try catch
-            if (code != null) {
-                return mngr;
-            } else {
-                return null;
-            }
+            string code = await mngr.Register(); //will throw an error if something wrong with the APIs
+            return mngr;
         }
 
         /// <summary>
@@ -108,13 +105,12 @@ namespace FusedVR.Web3 {
             webRequest.Dispose();
             if (jsonMap != null) {
                 string code = "";
-                jsonMap.TryGetValue("code", out code);
+                jsonMap.TryGetValue("code", out code); //TODO: throw error if missing
 
                 registerCode = code;
                 return RegisterCode;
             } else {
-                //TODO: throw error???
-                return null;
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
             }
         }
 
@@ -124,8 +120,12 @@ namespace FusedVR.Web3 {
         /// Timeout is approximately 6 minutes
         /// </summary>
         public async Task<bool> AwaitLogin() {
+            if (GetBearerToken() != null) { //we are already logged in
+                return true;
+            }
+
             if (RegisterCode == null) {
-                return false; //TODO throw error that register has not been called
+                throw new Exception("No Registration Code avaliable. Call Register first.");
             }
 
             WWWForm form = new WWWForm();
@@ -140,12 +140,13 @@ namespace FusedVR.Web3 {
             webRequest.Dispose();
             if (jsonMap != null) {
                 string bearerToken = "";
-                jsonMap.TryGetValue("token", out bearerToken);
-
+                jsonMap.TryGetValue("token", out bearerToken); //TODO: throw error if missing
+               
+                registerCode = null; //reset code after login
                 PlayerPrefs.SetString(GetBearerKey(), bearerToken);
                 return true;
             } else {
-                return false; //TODO throw error that login failed
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
             }
         }
 
@@ -159,6 +160,12 @@ namespace FusedVR.Web3 {
         /// This link should be displayed to the user in the application to enable them to authenticate the service
         /// </summary>
         public async Task<string> GetMagicLink() {
+            if (GetBearerToken() != null && RegisterCode == null) { //we are already logged in
+                throw new Exception("Already logged in succesfully. Re-register before calling Magic Link");
+            } else if (RegisterCode == null) {
+                throw new Exception("Token expired. Call Register first.");
+            }
+
             WWWForm form = new WWWForm();
             form.AddField("code", RegisterCode);
             form.AddField("appId", AppID);
@@ -171,10 +178,10 @@ namespace FusedVR.Web3 {
             webRequest.Dispose();
             if (jsonMap != null) {
                 string value = ""; //get dictionary value
-                jsonMap.TryGetValue("magicLink", out value);
+                jsonMap.TryGetValue("magicLink", out value); //TODO: throw error if missing
                 return value;
             } else {
-                return "Login Function has NOT been called";
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
             }
         }
         #endregion
@@ -208,10 +215,10 @@ namespace FusedVR.Web3 {
             webRequest.Dispose();
             if (jsonMap != null) {
                 string value = ""; //get dictionary value
-                jsonMap.TryGetValue("balance", out value);
+                jsonMap.TryGetValue("balance", out value); //TODO: throw error if missing
                 return value;
             } else {
-                return "Error Validating";
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
             }
         }
 
@@ -232,7 +239,11 @@ namespace FusedVR.Web3 {
                 List< Dictionary<string, string> > >
             (System.Text.Encoding.UTF8.GetString(webRequest.downloadHandler.data));
             webRequest.Dispose();
-            return jsonMap;
+            if (jsonMap != null) {
+                return jsonMap;
+            } else {
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
+            }
         }
 
         /// <summary>
@@ -251,8 +262,12 @@ namespace FusedVR.Web3 {
             List<Dictionary<string, string>> jsonMap = JsonConvert.DeserializeObject<
                 List<Dictionary<string, string>>>
             (System.Text.Encoding.UTF8.GetString(webRequest.downloadHandler.data));
-            webRequest.Dispose();   
-            return jsonMap;
+            webRequest.Dispose();
+            if (jsonMap != null) {
+                return jsonMap;
+            } else {
+                throw new Exception("Network Error : Response not JSON \n" + webRequest.downloadHandler.data);
+            }
         }
 
         #endregion
@@ -270,15 +285,12 @@ namespace FusedVR.Web3 {
         /// </summary>
         public string GetBearerToken() {
             string token = PlayerPrefs.GetString(GetBearerKey());
-            if (token == null) {
-                throw new Exception("Token missing. Please Login Again.");
-            }
 
-            if (ValidToken(token)) {
+            if (ValidToken(token)) { //only return a valid token
                 return token;
             }
 
-            throw new Exception("Token is no longer valid. Please Login Again.");
+            return null;
         }
 
         /// <summary>
@@ -287,8 +299,8 @@ namespace FusedVR.Web3 {
         private bool ValidToken(string token) {
             Dictionary<string, string> data = DecodeJWT(token);
             if (data != null) {
-                DateTime iat = new DateTime(long.Parse(data["iat"]));
-                if (data["appId"] == AppID && iat < DateTime.Now) {
+                long exp = long.Parse(data["exp"]);
+                if (data["appId"] == AppID && DateTimeOffset.Now.ToUnixTimeSeconds() < exp) {
                     return true;
                 }
             }
@@ -298,7 +310,7 @@ namespace FusedVR.Web3 {
 
         // example implmentation for decoding a JWT bearer token
         public static Dictionary<string, string> DecodeJWT(string token) {
-            var parts = token.Split('.');
+            var parts = token?.Split('.');
             if (parts.Length > 2) {
                 var decode = parts[1];
                 var padLength = 4 - decode.Length % 4;
